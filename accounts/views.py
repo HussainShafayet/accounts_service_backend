@@ -2,7 +2,8 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from .serializers import UserRegistrationSerializer
+from .serializers import UserRegistrationSerializer, UserSerializer
+from .models import CustomUser
 
 class RegisterUserAPIView(APIView):
     """
@@ -16,8 +17,9 @@ class RegisterUserAPIView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-#class UserView(APIView):
-#    permission_classes = [permissions.IsAuthenticated]
-#    def get(self, request):
-#        serializer = UserSerializer(request.user)
-#        return Response(serializer.data)
+
+class UserListAPIView(APIView):
+    def get(self, request):
+        users = CustomUser.objects.all()
+        serializer = UserSerializer(users, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)

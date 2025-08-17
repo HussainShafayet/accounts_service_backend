@@ -20,7 +20,8 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         )
         return user
 
-#class UserSerializer(serializers.ModelSerializer):
-#    class Meta:
-#        model = User
-#        fields = ('id', 'username', 'email')
+class UserSerializer(serializers.ModelSerializer):
+     class Meta:
+        model = User
+        fields = ['id', 'username', 'email', 'phone_number']
+        read_only_fields = ['id']
