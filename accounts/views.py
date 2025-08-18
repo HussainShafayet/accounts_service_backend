@@ -4,11 +4,9 @@ from rest_framework.response import Response
 from rest_framework import status
 from .serializers import UserRegistrationSerializer, UserSerializer
 from .models import CustomUser
+from rest_framework.permissions import IsAuthenticated
 
 class RegisterUserAPIView(APIView):
-    """
-    API endpoint to register a new user.
-    """
     def post(self, request):
         serializer = UserRegistrationSerializer(data=request.data)
         if serializer.is_valid():
@@ -19,6 +17,7 @@ class RegisterUserAPIView(APIView):
 
 
 class UserListAPIView(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request):
         users = CustomUser.objects.all()
         serializer = UserSerializer(users, many=True)
