@@ -74,10 +74,11 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
 
 
 
-
+User = get_user_model();
 class PhoneOTP(models.Model):
-    user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
     otp = models.CharField(max_length=6)
+    temp_token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     created_at = models.DateTimeField(default=timezone.now)
     is_used = models.BooleanField(default=False)
 

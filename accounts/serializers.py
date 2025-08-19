@@ -91,27 +91,20 @@ class SendOTPSerializer(serializers.Serializer):
    def create(self, validated_data):
         user = User.objects.get(phone_number=validated_data['phone_number'])
         otp_code = str(random.randint(100000, 999999))
-        temp_token = str(uuid.uuid4())
-        PhoneOTP.objects.create(user=user, otp=otp_code, is_used=False)
+        otp_obj = PhoneOTP.objects.create(user=user, otp=otp_code)
         # TODO: send SMS here
         print(f"Send OTP {otp_code} to {user.phone_number}")
-        return {"otp_sent": True,"otp":otp_code, "temp_token": temp_token}
+        return {"otp_sent": True,"otp":otp_code, "temp_token": otp_obj.temp_token}
 
 class VerifyOTPSerializer(serializers.Serializer):
-    phone_number = serializers.CharField()
     otp = serializers.CharField()
-    temp_token = serializers.CharField()
+    temp_token = serializers.UUIDField()
 
     def validate(self, data):
         try:
-            user = User.objects.get(phone_number=data['phone_number'])
-        except User.DoesNotExist:
-            raise serializers.ValidationError("Invalid phone number.")
-
-        try:
-            otp_obj = PhoneOTP.objects.filter(user=user, is_used=False).latest('created_at')
+            otp_obj = PhoneOTP.objects.get(temp_token=data['temp_token'], is_used=False);
         except PhoneOTP.DoesNotExist:
-            raise serializers.ValidationError("No OTP found. Request a new one.")
+            raise serializers.ValidationError("Invalid or expired OTP session.")
 
         if otp_obj.otp != data['otp']:
             raise serializers.ValidationError("Invalid OTP.")
@@ -121,13 +114,8 @@ class VerifyOTPSerializer(serializers.Serializer):
         otp_obj.is_used = True
         otp_obj.save()
 
-        refresh = RefreshToken.for_user(user)
+        refresh = RefreshToken.for_user(otp_obj.user)
         return {
-            "user": {
-                'id': user.id,
-                'email': user.email,
-                'username': user.username,
-            },
             "access": str(refresh.access_token),
             "refresh": str(refresh)
         }
