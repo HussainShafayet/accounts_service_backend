@@ -6,6 +6,10 @@ from .serializers import UserRegistrationSerializer, UserSerializer
 from .models import CustomUser
 from rest_framework.permissions import IsAuthenticated
 
+#login
+from rest_framework_simplejwt.views import TokenObtainPairView
+from .serializers import CustomTokenObtainPairSerializer
+
 class RegisterUserAPIView(APIView):
     def post(self, request):
         serializer = UserRegistrationSerializer(data=request.data)
@@ -22,3 +26,6 @@ class UserListAPIView(APIView):
         users = CustomUser.objects.all()
         serializer = UserSerializer(users, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+class CustomTokenObtainPairView(TokenObtainPairView):
+    serializer_class = CustomTokenObtainPairSerializer
