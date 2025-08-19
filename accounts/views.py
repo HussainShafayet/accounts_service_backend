@@ -2,7 +2,7 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from .serializers import UserRegistrationSerializer, UserSerializer
+from .serializers import UserRegistrationSerializer, UserSerializer, SendOTPSerializer, VerifyOTPSerializer
 from .models import CustomUser
 from rest_framework.permissions import IsAuthenticated
 
@@ -29,3 +29,20 @@ class UserListAPIView(APIView):
 
 class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
+
+class SendOTPAPIView(APIView):
+    def post(self, request):
+        serializer = SendOTPSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        return Response(serializer.save(), status=status.HTTP_200_OK)
+
+class VerifyOTPAPIView(APIView):
+    def post(self, request):
+        serializer = VerifyOTPSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        return Response({
+            "user": serializer.validated_data['user'],
+            "access": serializer.validated_data['access'],
+            "refresh": serializer.validated_data['refresh']
+        }, status=status.HTTP_200_OK)
+
