@@ -81,6 +81,16 @@ class PhoneOTP(models.Model):
     temp_token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     created_at = models.DateTimeField(default=timezone.now)
     is_used = models.BooleanField(default=False)
+    
+    def save(self, *args, **kwargs):
+        # ensure unique temp_token
+        if not self.temp_token:
+            while True:
+                token = uuid.uuid4()
+                if not PhoneOTP.objects.filter(temp_token=token).exists():
+                    self.temp_token = token
+                    break
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.user.phone_number} - {self.otp}"

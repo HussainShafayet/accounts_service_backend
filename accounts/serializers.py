@@ -90,6 +90,11 @@ class SendOTPSerializer(serializers.Serializer):
 
    def create(self, validated_data):
         user = User.objects.get(phone_number=validated_data['phone_number'])
+
+        # Invalidate old OTPs
+        PhoneOTP.objects.filter(user=user, is_used=False).update(is_used=True)
+
+        # Generate new OTP + temp_token
         otp_code = str(random.randint(100000, 999999))
         otp_obj = PhoneOTP.objects.create(user=user, otp=otp_code)
         # TODO: send SMS here
@@ -119,4 +124,32 @@ class VerifyOTPSerializer(serializers.Serializer):
             "access": str(refresh.access_token),
             "refresh": str(refresh)
         }
+
+class ResendOTPSerializer(serializers.Serializer):
+    phone_number = serializers.CharField()
+
+    def validate_phone_number(self, value):
+        if not User.objects.filter(phone_number=value).exists():
+            raise serializers.ValidationError("User with this phone number does not exist.")
+        return value
+
+    def create(self, validated_data):
+        user = User.objects.get(phone_number=validated_data['phone_number'])
+
+        # Invalidate old OTPs (optional)
+        PhoneOTP.objects.filter(user=user, is_used=False).update(is_used=True)
+
+        # Generate new OTP + temp_token
+        otp_code = str(random.randint(100000, 999999))
+        otp_obj = PhoneOTP.objects.create(user=user, otp=otp_code)
+
+        # TODO: send SMS here
+        print(f"Resent OTP {otp_code} to {user.phone_number}")
+
+        return {
+            "otp_sent": True,
+            "temp_token": str(otp_obj.temp_token)
+        }
+
+
 

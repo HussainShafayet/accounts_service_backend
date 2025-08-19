@@ -2,7 +2,7 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from .serializers import UserRegistrationSerializer, UserSerializer, SendOTPSerializer, VerifyOTPSerializer
+from .serializers import UserRegistrationSerializer, UserSerializer, SendOTPSerializer, VerifyOTPSerializer, ResendOTPSerializer
 from .models import CustomUser
 from rest_framework.permissions import IsAuthenticated
 
@@ -44,4 +44,13 @@ class VerifyOTPAPIView(APIView):
             "access": serializer.validated_data['access'],
             "refresh": serializer.validated_data['refresh']
         }, status=status.HTTP_200_OK)
+
+class ResendOTPAPIView(APIView):
+    def post(self, request):
+        serializer = ResendOTPSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        return Response(serializer.save(), status=status.HTTP_200_OK)
+
+
+
 
