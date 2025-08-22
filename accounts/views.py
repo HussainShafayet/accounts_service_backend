@@ -91,10 +91,31 @@ class VerifyOTPAPIView(APIView):
     def post(self, request):
         serializer = VerifyOTPSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        return Response({
-            "access": serializer.validated_data['access'],
-            "refresh": serializer.validated_data['refresh']
-        }, status=status.HTTP_200_OK)
+        data = serializer.validated_data
+
+        # data['access'] is the access token returned by the serializer
+        access_token = data['access']
+        refresh_token = data['refresh']  # get refresh token
+
+        # Prepare response
+        response = Response(
+            {
+                "access": access_token,
+            },
+            status=status.HTTP_200_OK
+        )
+
+        # Set refresh token as HttpOnly cookie
+        response.set_cookie(
+            key='refresh_token',
+            value=refresh_token,
+            httponly=True,
+            secure=not settings.DEBUG,  # set True in production (HTTPS)
+            samesite='Strict',  # or 'Lax' if needed
+            path='/'  # only send cookie to refresh endpoint
+        )
+
+        return response
 
 class ResendOTPAPIView(APIView):
     def post(self, request):
