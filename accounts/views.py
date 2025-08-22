@@ -123,6 +123,18 @@ class ResendOTPAPIView(APIView):
         serializer.is_valid(raise_exception=True)
         return Response(serializer.save(), status=status.HTTP_200_OK)
 
+class LogoutView(APIView):
+    def post(self, request):
+        response = Response({"detail": "Successfully logged out."}, status=status.HTTP_200_OK)
+        
+        # Delete refresh token cookie
+        response.delete_cookie(
+            key="refresh_token",
+            path="/",  # Must match the path used when setting the cookie
+        )
+
+        return response
+    
 
 
 
