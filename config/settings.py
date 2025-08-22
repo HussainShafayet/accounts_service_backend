@@ -27,7 +27,7 @@ SECRET_KEY = 'django-insecure-urkus0qu4dl65yyj=4)#5ru3%mv$^+fui9a_2lr!%h8*2$5yqi
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0', 'backend']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0', 'backend',  "http://localhost:5173",]
 
 AUTH_USER_MODEL = 'accounts.CustomUser'
 
@@ -48,6 +48,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',  # Middleware for CORS
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -55,11 +56,17 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'corsheaders.middleware.CorsMiddleware',  # Middleware for CORS
+    
 ]
 
-CORS_ALLOW_ALL_ORIGINS = True  # For development only
 
+# Explicitly allow your frontend origin
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",  # Vite dev server
+]
+
+# Allow cookies / credentials
+CORS_ALLOW_CREDENTIALS = True
 ROOT_URLCONF = 'config.urls'
 
 REST_FRAMEWORK = {
@@ -72,7 +79,7 @@ from datetime import timedelta
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=1),
-    'REFRESH_TOKEN_LIFETIME': timedelta(minutes=3),
+    'REFRESH_TOKEN_LIFETIME': timedelta(minutes=2),
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
 
