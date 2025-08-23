@@ -112,7 +112,7 @@ class VerifyOTPAPIView(APIView):
             httponly=True,
             secure=not settings.DEBUG,  # set True in production (HTTPS)
             samesite='Strict',  # or 'Lax' if needed
-            path='/'  # only send cookie to refresh endpoint
+            path='/'
         )
 
         return response
