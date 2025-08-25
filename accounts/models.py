@@ -17,6 +17,7 @@ from django.db import models
 from django.utils import timezone
 import uuid
 from django.contrib.auth import get_user_model
+from datetime import timedelta
 
 
 class CustomUserManager(BaseUserManager):
@@ -40,37 +41,31 @@ class CustomUserManager(BaseUserManager):
 
 
 class CustomUser(AbstractBaseUser, PermissionsMixin):
-    # Core identity
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    email = models.EmailField(unique=True, db_index=True)
+    email = models.EmailField(unique=True, db_index=True, blank=True, null=True)
     username = models.CharField(max_length=50, blank=True, null=True, unique=True)
-
-    # Contact
     phone_number = models.CharField(max_length=20, blank=True, null=True, unique=True)
 
-    # Profile
-    first_name = models.CharField(max_length=50, blank=True)
-    last_name = models.CharField(max_length=50, blank=True)
+    first_name = models.CharField(max_length=50)
+    last_name = models.CharField(max_length=50)
+    address = models.TextField(default="Temporary Address")
+
     profile_picture = models.URLField(blank=True, null=True)
 
-    # Status
-    is_active = models.BooleanField(default=True)
+    is_active = models.BooleanField(default=False)
     is_staff = models.BooleanField(default=False)
-    is_verified = models.BooleanField(default=False)  # email/phone verification
+    is_verified = models.BooleanField(default=False)
     last_login_ip = models.GenericIPAddressField(blank=True, null=True)
-
-    # Metadata
     date_joined = models.DateTimeField(default=timezone.now)
 
-    # Manager
     objects = CustomUserManager()
 
-    # Login identifier
     USERNAME_FIELD = "email"
-    REQUIRED_FIELDS = []  # username optional for superuser
+    REQUIRED_FIELDS = []
 
     def __str__(self):
-        return self.email or str(self.id)
+        return self.email or self.phone_number or str(self.id)
+
 
 
 
@@ -94,3 +89,38 @@ class PhoneOTP(models.Model):
 
     def __str__(self):
         return f"{self.user.phone_number} - {self.otp}"
+class UserOTP(models.Model):
+    OTP_TYPE_CHOICES = (
+        ('email', 'Email'),
+        ('phone', 'Phone'),
+    )
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='otps')
+    otp = models.CharField(max_length=6)
+    otp_type = models.CharField(max_length=10, choices=OTP_TYPE_CHOICES)
+    temp_token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    created_at = models.DateTimeField(default=timezone.now)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    is_used = models.BooleanField(default=False)
+
+    def save(self, *args, **kwargs):
+        # set expires_at if not already set
+        if not self.expires_at:
+            self.expires_at = timezone.now() + timedelta(minutes=10)
+        # ensure unique temp_token
+        if not self.temp_token:
+            while True:
+                token = uuid.uuid4()
+                if not UserOTP.objects.filter(temp_token=token).exists():
+                    self.temp_token = token
+                    break
+        super().save(*args, **kwargs)
+
+    def is_valid(self):
+        return timezone.now() <= self.expires_at and not self.is_used
+
+    def __str__(self):
+        return f"{self.user.email or self.user.phone_number} - {self.otp_type} - {self.otp}"
+
+
+

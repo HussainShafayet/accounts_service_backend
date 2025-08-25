@@ -1,8 +1,9 @@
 from django.urls import path
-from .views import RegisterUserAPIView,  UserListAPIView, CustomTokenObtainPairView, SendOTPAPIView, VerifyOTPAPIView, ResendOTPAPIView, CustomTokenRefreshView, LogoutView
+from .views import RegisterUserAPIView,  UserListAPIView, CustomTokenObtainPairView, SendOTPAPIView, VerifyOTPAPIView, ResendOTPAPIView, CustomTokenRefreshView, LogoutView, VerifyRegistrationOTPAPIView
 
 urlpatterns = [
     path('register/', RegisterUserAPIView.as_view()),
+    path('verify-registration-otp/', VerifyRegistrationOTPAPIView.as_view(), name='verify-registration-otp'),
     path('users/', UserListAPIView.as_view()),
     #username or email
     path('login/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),

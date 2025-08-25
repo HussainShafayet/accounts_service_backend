@@ -2,7 +2,7 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from .serializers import UserRegistrationSerializer, UserSerializer, SendOTPSerializer, VerifyOTPSerializer, ResendOTPSerializer
+from .serializers import UserRegistrationSerializer, UserSerializer, SendOTPSerializer, VerifyOTPSerializer, ResendOTPSerializer, RegistrationOTPVerifySerializer
 from .models import CustomUser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -14,12 +14,32 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from .serializers import CustomTokenObtainPairSerializer
 
 class RegisterUserAPIView(APIView):
-    def post(self, request):
+     def post(self, request):
         serializer = UserRegistrationSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.save()
-            return Response({'message': 'User registered successfully'}, status=status.HTTP_201_CREATED)
+
+            # Development/testing only
+            otp_obj = user.otps.latest('created_at')  # UserOTP just created
+            otp_value = otp_obj.otp
+            temp_token = otp_obj.temp_token
+
+            return Response(
+                {
+                    'message': 'User registered successfully. OTP pending.',
+                    'temp_token': str(temp_token),
+                    'otp': otp_value,  # Only for dev/testing
+                },
+                status=status.HTTP_201_CREATED
+            )
+
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+class VerifyRegistrationOTPAPIView(APIView):
+    def post(self, request):
+        serializer = RegistrationOTPVerifySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        return Response(serializer.validated_data, status=status.HTTP_200_OK)
 
 
 

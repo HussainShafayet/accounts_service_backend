@@ -4,7 +4,7 @@ from django.contrib.auth.password_validation import validate_password
 
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.contrib.auth import authenticate
-from .models import PhoneOTP
+from .models import PhoneOTP, UserOTP
 import random
 import uuid
 from django.utils import timezone
@@ -16,33 +16,79 @@ User = get_user_model()
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
     password = serializers.CharField(
-        write_only=True, 
-        required=True, 
-        min_length=8, 
+        write_only=True,
+        required=True,
+        min_length=8,
         validators=[validate_password]
     )
 
     class Meta:
         model = User
-        # Make username optional if your model allows blank=True
-        fields = ['username', 'email', 'password', 'phone_number']
+        fields = [
+            'username', 'email', 'phone_number',
+            'first_name', 'last_name', 'address', 'password'
+        ]
+
+    def validate(self, attrs):
+        email = attrs.get('email')
+        phone_number = attrs.get('phone_number')
+
+        if not email and not phone_number:
+            raise serializers.ValidationError(
+                "At least one of email or phone number is required."
+            )
+
+        if not attrs.get('first_name') or not attrs.get('last_name'):
+            raise serializers.ValidationError(
+                "First name and Last name are required."
+            )
+
+        if not attrs.get('address'):
+            raise serializers.ValidationError("Address is required.")
+
+        return attrs
 
     def create(self, validated_data):
-        # Use get with default None for optional fields
-        username = validated_data.get('username', None)
-        email = validated_data.get('email')
-        phone_number = validated_data.get('phone_number', None)
-        password = validated_data['password']
-
-        # Create user using set_password to hash the password
-        user = User(
-            username=username,
-            email=email,
-            phone_number=phone_number
-        )
+        password = validated_data.pop('password')
+        user = User(**validated_data)
         user.set_password(password)
+        user.is_active = False  # inactive until OTP verification
         user.save()
+
+        # Send OTP (phone priority)
+        from .services import send_otp
+        send_otp(user)
+
+        # Return only temp_token for verification
         return user
+    
+class RegistrationOTPVerifySerializer(serializers.Serializer):
+    otp = serializers.CharField()
+    temp_token = serializers.UUIDField()
+
+    def validate(self, data):
+        try:
+            otp_obj = UserOTP.objects.get(temp_token=data['temp_token'], is_used=False)
+        except UserOTP.DoesNotExist:
+            raise serializers.ValidationError("Invalid or expired OTP session.")
+
+        if otp_obj.otp != data['otp']:
+            raise serializers.ValidationError("Invalid OTP.")
+
+        if timezone.now() > otp_obj.expires_at:
+            raise serializers.ValidationError("OTP expired.")
+
+        # Activate user
+        user = otp_obj.user
+        user.is_active = True
+        user.is_verified = True
+        user.save()
+
+        # Mark OTP used
+        otp_obj.is_used = True
+        otp_obj.save()
+
+        return {"message": "User verified successfully"}
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -151,5 +197,30 @@ class ResendOTPSerializer(serializers.Serializer):
             "temp_token": str(otp_obj.temp_token)
         }
 
+#class LoginOTPVerifySerializer(serializers.Serializer):
+#    otp = serializers.CharField()
+#    temp_token = serializers.UUIDField()
 
+#    def validate(self, data):
+#        try:
+#            otp_obj = UserOTP.objects.get(temp_token=data['temp_token'], is_used=False)
+#        except UserOTP.DoesNotExist:
+#            raise serializers.ValidationError("Invalid or expired OTP session.")
+
+#        if otp_obj.otp != data['otp']:
+#            raise serializers.ValidationError("Invalid OTP.")
+
+#        if timezone.now() > otp_obj.expires_at:
+#            raise serializers.ValidationError("OTP expired.")
+
+#        otp_obj.is_used = True
+#        otp_obj.save()
+
+#        user = otp_obj.user
+
+#        refresh = RefreshToken.for_user(user)
+#        return {
+#            "access": str(refresh.access_token),
+#            "refresh": str(refresh)
+#        }
 
