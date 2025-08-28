@@ -10,6 +10,7 @@ import uuid
 from django.utils import timezone
 from datetime import timedelta
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework.validators import UniqueValidator
 
 
 User = get_user_model()
@@ -20,6 +21,26 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         required=True,
         min_length=8,
         validators=[validate_password]
+    )
+    
+    # Custom unique messages for email and phone
+    email = serializers.EmailField(
+        required=False,
+        validators=[
+            UniqueValidator(
+                queryset=User.objects.all(),
+                message="This email is already registered."
+            )
+        ]
+    )
+    phone_number = serializers.CharField(
+        required=False,
+        validators=[
+            UniqueValidator(
+                queryset=User.objects.all(),
+                message="This phone number is already registered."
+            )
+        ]
     )
 
     class Meta:
