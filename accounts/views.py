@@ -26,7 +26,7 @@ class RegisterUserAPIView(APIView):
                     {
                         'message': 'User registered successfully. OTP pending.',
                         'temp_token': str(temp_token),
-                        # 'otp': otp_value,  # REMOVE in production
+                         'otp': otp_obj["otp"],  # REMOVE in production
                     },
                     status=status.HTTP_201_CREATED
                 )
