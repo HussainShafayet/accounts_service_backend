@@ -30,21 +30,24 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         ]
 
     def validate(self, attrs):
+        errors = {}
+
         email = attrs.get('email')
-        phone_number = attrs.get('phone_number')
+        phone = attrs.get('phone_number')
 
-        if not email and not phone_number:
-            raise serializers.ValidationError(
-                "At least one of email or phone number is required."
-            )
+        # Ensure at least one of email or phone_number
+        if not email and not phone:
+            # Mark missing fields individually
+            errors['email'] = "Email is required if phone number is not provided."
+            errors['phone_number'] = "Phone number is required if email is not provided."
 
-        if not attrs.get('first_name') or not attrs.get('last_name'):
-            raise serializers.ValidationError(
-                "First name and Last name are required."
-            )
+        # Check other required fields dynamically
+        for field in ['first_name', 'last_name', 'address']:
+            if not attrs.get(field):
+                errors[field] = f"{field.replace('_', ' ').capitalize()} is required."
 
-        if not attrs.get('address'):
-            raise serializers.ValidationError("Address is required.")
+        if errors:
+            raise serializers.ValidationError(errors)
 
         return attrs
 
