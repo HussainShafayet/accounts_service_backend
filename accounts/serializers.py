@@ -22,10 +22,10 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         min_length=8,
         validators=[validate_password]
     )
-    
-    # Custom unique messages for email and phone
+
     email = serializers.EmailField(
         required=False,
+        allow_blank=True,
         validators=[
             UniqueValidator(
                 queryset=User.objects.all(),
@@ -35,6 +35,7 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
     )
     phone_number = serializers.CharField(
         required=False,
+        allow_blank=True,
         validators=[
             UniqueValidator(
                 queryset=User.objects.all(),
@@ -53,16 +54,15 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         errors = {}
 
-        email = attrs.get('email')
-        phone = attrs.get('phone_number')
+        # normalize blank → None
+        email = attrs.get('email') or None
+        phone = attrs.get('phone_number') or None
 
-        # Ensure at least one of email or phone_number
         if not email and not phone:
-            # Mark missing fields individually
             errors['email'] = "Email is required if phone number is not provided."
             errors['phone_number'] = "Phone number is required if email is not provided."
 
-        # Check other required fields dynamically
+        # Required fields check
         for field in ['first_name', 'last_name', 'address']:
             if not attrs.get(field):
                 errors[field] = f"{field.replace('_', ' ').capitalize()} is required."
@@ -70,7 +70,11 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         if errors:
             raise serializers.ValidationError(errors)
 
+        # put normalized values back
+        attrs['email'] = email
+        attrs['phone_number'] = phone
         return attrs
+
 
     def create(self, validated_data):
         password = validated_data.pop('password')
