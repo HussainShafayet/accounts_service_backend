@@ -9,6 +9,11 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from django.conf import settings
 
+from .services import send_otp
+import logging
+
+logger = logging.getLogger(__name__)
+
 #login
 from rest_framework_simplejwt.views import TokenObtainPairView
 from .serializers import CustomTokenObtainPairSerializer
@@ -16,32 +21,26 @@ from .serializers import CustomTokenObtainPairSerializer
 class RegisterUserAPIView(APIView):
     def post(self, request):
         serializer = UserRegistrationSerializer(data=request.data)
-        if serializer.is_valid():
-            try:
-                user = serializer.save()
-                otp_obj = user.otps.latest('created_at')  # Assuming OTP always exists
-                temp_token = otp_obj.temp_token
+        serializer.is_valid(raise_exception=True)
 
-                return Response(
-                    {
-                        'message': 'User registered successfully. OTP pending.',
-                        'temp_token': str(temp_token),
-                         'otp': otp_obj["otp"],  # REMOVE in production
-                    },
-                    status=status.HTTP_201_CREATED
-                )
-            except UserOTP.DoesNotExist:
-                return Response(
-                    {'error': 'OTP generation failed.'},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
-                )
-            except Exception as e:
-                return Response(
-                    {'error': 'Something went wrong.'},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
-                )
+        user = serializer.save()  # user is inactive until OTP verify
 
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            otp_obj = send_otp(user)
+        except Exception as e:
+            # This should be rare now; send_otp already swallows delivery errors
+            logger.exception(f"Unexpected error in send_otp: {e}")
+            return Response(
+                {"error": "Registered, but failed to generate OTP. Please try again."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        payload = {"temp_token": str(otp_obj.temp_token), "pending": True,}
+        # For developer convenience only:
+        if getattr(settings, "DEBUG", False):
+            payload["debug_otp"] = otp_obj.otp
+
+        return Response(payload, status=status.HTTP_201_CREATED)
 
     
 class VerifyRegistrationOTPAPIView(APIView):
