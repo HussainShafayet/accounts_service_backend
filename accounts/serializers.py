@@ -12,6 +12,7 @@ from datetime import timedelta
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.validators import UniqueValidator
 from django.db.models import Q
+from .services import send_otp_for
 
 
 User = get_user_model()
@@ -174,25 +175,27 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         return data
 
 class SendOTPSerializer(serializers.Serializer):
-   phone_number = serializers.CharField()
+    phone_number = serializers.CharField()
 
-   def validate_phone_number(self, value):
-        if not User.objects.filter(phone_number=value).exists():
+    def validate_phone_number(self, value):
+        qs = User.objects.filter(phone_number=value)
+        if not qs.exists():
             raise serializers.ValidationError("User with this phone number does not exist.")
         return value
 
-   def create(self, validated_data):
-        user = User.objects.get(phone_number=validated_data['phone_number'])
-
-        # Invalidate old OTPs
-        PhoneOTP.objects.filter(user=user, is_used=False).update(is_used=True)
-
-        # Generate new OTP + temp_token
-        otp_code = str(random.randint(100000, 999999))
-        otp_obj = PhoneOTP.objects.create(user=user, otp=otp_code)
-        # TODO: send SMS here
-        print(f"Send OTP {otp_code} to {user.phone_number}")
-        return {"otp_sent": True,"otp":otp_code, "temp_token": otp_obj.temp_token}
+    def create(self, validated_data):
+        user = User.objects.get(phone_number=validated_data["phone_number"])
+        result = send_otp_for(user=user, channel="phone", purpose="login")
+        if not result["otp_sent"]:
+            raise serializers.ValidationError({"detail": result.get("message", "Failed to send OTP")})
+        data = {
+            "otp_sent": True,
+            "temp_token": result["temp_token"],
+            "expires_in_seconds": result["expires_in_seconds"]
+        }
+        if result["debug_otp"]:
+            data["debug_otp"] = result["debug_otp"]
+        return data
 
 class VerifyOTPSerializer(serializers.Serializer):
     otp = serializers.CharField()
