@@ -11,6 +11,7 @@ from django.utils import timezone
 from datetime import timedelta
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.validators import UniqueValidator
+from django.db.models import Q
 
 
 User = get_user_model()
@@ -126,27 +127,45 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    """
+    Login with either email or username via a single field: `login`.
+    """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Remove parent's email/username field so it doesn't complain
+        self.fields.pop(self.username_field, None)
+        # Replace with our unified login field
+        self.fields['login'] = serializers.CharField(write_only=True)
+        self.fields['password'].required = True
+        self.fields['password'].trim_whitespace = False
 
     def validate(self, attrs):
-        # Allow login with either email or username
-        login = attrs.get('email') or attrs.get('username')
-        password = attrs.get('password')
+        login = (attrs.get('login') or '').strip()
+        password = attrs.get('password') or ''
 
-        # Try to fetch user by email or username
-        try:
-            user = User.objects.get(email=login)
-        except User.DoesNotExist:
-            try:
-                user = User.objects.get(username=login)
-            except User.DoesNotExist:
-                raise serializers.ValidationError('No user found with this email or username.')
+        if not login:
+            raise serializers.ValidationError({'login': 'Login (email or username) is required.'})
 
-        # Authenticate user
-        if not user.check_password(password):
-            raise serializers.ValidationError('Incorrect password.')
+        # Try case-insensitive match
+        user = User.objects.filter(Q(email__iexact=login) | Q(username__iexact=login)).first()
+        if not user:
+            raise serializers.ValidationError({'login': 'No user found with this email or username.'})
 
-        # Use super() to generate JWT tokens
-        data = super().validate({'email': user.email, 'password': password})
+        if not user.is_active:
+            raise serializers.ValidationError({'login': 'Account is not active. Please verify.'})
+
+        # Authenticate against Django’s backend
+        user_auth = authenticate(
+            request=self.context.get('request'),
+            username=user.email,  # canonical
+            password=password
+        )
+        if user_auth is None:
+            raise serializers.ValidationError({'password': 'Incorrect credentials.'})
+
+        # Delegate to parent with canonical identifier
+        data = super().validate({self.username_field: user.email, 'password': password})
+
         data['user'] = {
             'id': user.id,
             'email': user.email,

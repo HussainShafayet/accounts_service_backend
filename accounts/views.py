@@ -60,16 +60,15 @@ class UserListAPIView(APIView):
 
 class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
+
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        # data['access'] is the access token returned by the serializer
         access_token = data['access']
-        refresh_token = data['refresh']  # get refresh token
+        refresh_token = data['refresh']
 
-        # Prepare response
         response = Response(
             {
                 "access": access_token,
@@ -78,14 +77,27 @@ class CustomTokenObtainPairView(TokenObtainPairView):
             status=status.HTTP_200_OK
         )
 
-        # Set refresh token as HttpOnly cookie
+        # If your frontend runs on a different origin, you need SameSite=None and Secure=True (in prod)
+        same_site = 'None' if not settings.DEBUG else 'Lax'
+        secure_flag = not settings.DEBUG
+
+        # Optionally set Max-Age to your refresh lifetime in seconds
+        max_age = None
+        try:
+            lifetime = settings.SIMPLE_JWT['REFRESH_TOKEN_LIFETIME']
+            # timedelta -> seconds
+            max_age = int(lifetime.total_seconds())
+        except Exception:
+            pass
+
         response.set_cookie(
             key='refresh_token',
             value=refresh_token,
             httponly=True,
-            secure=not settings.DEBUG,  # set True in production (HTTPS)
-            samesite='Strict',  # or 'Lax' if needed
-            path='/'  # only send cookie to refresh endpoint
+            secure=secure_flag,
+            samesite=same_site,
+            path='/',               # cookie available site-wide; change to '/api/token/refresh/' if you want to scope it
+            max_age=max_age,        # optional but recommended
         )
 
         return response
