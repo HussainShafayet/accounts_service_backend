@@ -1,7 +1,7 @@
 # accounts/views.py
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import status
+from rest_framework import status, throttling
 from .serializers import UserRegistrationSerializer, UserSerializer, SendOTPSerializer, VerifyOTPSerializer, ResendOTPSerializer, RegistrationOTPVerifySerializer
 from .models import CustomUser, UserOTP
 from rest_framework.permissions import IsAuthenticated
@@ -22,28 +22,33 @@ class RegisterUserAPIView(APIView):
     def post(self, request):
         serializer = UserRegistrationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        user = serializer.save()
 
-        user = serializer.save()  # user is inactive until OTP verify
+        
+        from .services import send_otp_for
+        result = send_otp_for(user=user, purpose="registration", force=True)
 
-        try:
-            otp_obj = send_otp(user)
-        except Exception as e:
-            # This should be rare now; send_otp already swallows delivery errors
-            logger.exception(f"Unexpected error in send_otp: {e}")
+        if not result.get("otp_sent"):
             return Response(
-                {"error": "Registered, but failed to generate OTP. Please try again."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                {"error": result.get("message", "Registered, but failed to send OTP.")},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
-        payload = {"temp_token": str(otp_obj.temp_token), "pending": True,}
-        # For developer convenience only:
-        if getattr(settings, "DEBUG", False):
-            payload["debug_otp"] = otp_obj.otp
+        payload = {
+            "temp_token": result["temp_token"],
+            "pending": True,
+            "expires_in_seconds": result["expires_in_seconds"]
+        }
+        if result.get("debug_otp"):
+            payload["debug_otp"] = result["debug_otp"]
 
         return Response(payload, status=status.HTTP_201_CREATED)
 
     
 class VerifyRegistrationOTPAPIView(APIView):
+    # Optional: basic throttle
+    throttle_classes = [throttling.AnonRateThrottle]
+
     def post(self, request):
         serializer = RegistrationOTPVerifySerializer(data=request.data)
         serializer.is_valid(raise_exception=True)

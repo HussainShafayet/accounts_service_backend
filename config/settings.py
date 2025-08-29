@@ -117,14 +117,42 @@ DATABASES = {
 
 
 # Email settings from .env
-#EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-EMAIL_HOST = os.environ.get('EMAIL_HOST')
+# Email (dynamic)
+# -------------------------
+def getenv_bool(key: str, default: bool) -> bool:
+    val = os.environ.get(key)
+    if val is None:
+        return default
+    return val.lower() in ("1", "true", "yes", "on")
+
+# Allow explicit override
+EMAIL_BACKEND = os.environ.get('EMAIL_BACKEND')  # e.g. 'django.core.mail.backends.smtp.EmailBackend'
+
+EMAIL_HOST = os.environ.get('EMAIL_HOST', '')
 EMAIL_PORT = int(os.environ.get('EMAIL_PORT', 587))
-EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True') == 'True'
-EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER')
-EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD')
-DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL')
+EMAIL_USE_TLS = getenv_bool('EMAIL_USE_TLS', True)
+EMAIL_USE_SSL = getenv_bool('EMAIL_USE_SSL', False)  # if True, TLS will be disabled below
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+
+# DEFAULT_FROM_EMAIL fallback: use first allowed host or localhost
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL') or f"no-reply@{ALLOWED_HOSTS[0] if ALLOWED_HOSTS else 'localhost'}"
+
+# If no explicit backend set via env, choose sensible default
+if not EMAIL_BACKEND:
+    if DEBUG:
+        # Dev: print emails to console
+        EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+    elif EMAIL_HOST and EMAIL_HOST_USER:
+        # Prod: switch to SMTP if creds exist
+        EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+    else:
+        # Safe fallback (prevents 500s if SMTP not configured yet)
+        EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+
+# If SSL is enabled, disable TLS to avoid conflicts
+if EMAIL_USE_SSL:
+    EMAIL_USE_TLS = False
 
 
 

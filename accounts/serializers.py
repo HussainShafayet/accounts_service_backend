@@ -13,6 +13,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.validators import UniqueValidator
 from django.db.models import Q
 from .services import send_otp_for, verify_otp
+from django.db import transaction
 
 
 User = get_user_model()
@@ -28,22 +29,18 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
     email = serializers.EmailField(
         required=False,
         allow_blank=True,
-        validators=[
-            UniqueValidator(
-                queryset=User.objects.all(),
-                message="This email is already registered."
-            )
-        ]
+        validators=[UniqueValidator(
+            queryset=User.objects.all(),
+            message="This email is already registered."
+        )]
     )
     phone_number = serializers.CharField(
         required=False,
         allow_blank=True,
-        validators=[
-            UniqueValidator(
-                queryset=User.objects.all(),
-                message="This phone number is already registered."
-            )
-        ]
+        validators=[UniqueValidator(
+            queryset=User.objects.all(),
+            message="This phone number is already registered."
+        )]
     )
 
     class Meta:
@@ -64,7 +61,6 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             errors['email'] = "Email is required if phone number is not provided."
             errors['phone_number'] = "Phone number is required if email is not provided."
 
-        # Required fields check
         for field in ['first_name', 'last_name', 'address']:
             if not attrs.get(field):
                 errors[field] = f"{field.replace('_', ' ').capitalize()} is required."
@@ -72,11 +68,9 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         if errors:
             raise serializers.ValidationError(errors)
 
-        # put normalized values back
         attrs['email'] = email
         attrs['phone_number'] = phone
         return attrs
-
 
     def create(self, validated_data):
         password = validated_data.pop('password')
@@ -84,39 +78,42 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         user.set_password(password)
         user.is_active = False  # inactive until OTP verification
         user.save()
-
-        # Send OTP (phone priority)
-        from .services import send_otp
-        send_otp(user)
-
-        # Return only temp_token for verification
         return user
+
     
 class RegistrationOTPVerifySerializer(serializers.Serializer):
     otp = serializers.CharField()
     temp_token = serializers.UUIDField()
 
     def validate(self, data):
-        try:
-            otp_obj = UserOTP.objects.get(temp_token=data['temp_token'], is_used=False)
-        except UserOTP.DoesNotExist:
-            raise serializers.ValidationError("Invalid or expired OTP session.")
+        otp = (data.get("otp") or "").strip()
+        if not otp.isdigit() or len(otp) != 6:
+            raise serializers.ValidationError("Invalid OTP format.")
 
-        if otp_obj.otp != data['otp']:
-            raise serializers.ValidationError("Invalid OTP.")
+        # Use service – channel auto-detected from the token record
+        res = verify_otp(
+            temp_token=str(data["temp_token"]),
+            otp=otp,
+            channel=None,   # auto: use the otp_type stored with this token
+        )
+        if not res.get("ok"):
+            # e.g. "Invalid token." / "OTP expired." / "Incorrect OTP."
+            raise serializers.ValidationError(res.get("message") or "OTP verification failed.")
 
-        if timezone.now() > otp_obj.expires_at:
-            raise serializers.ValidationError("OTP expired.")
+        user = res.get("user")
+        if user is None:
+            raise serializers.ValidationError("Invalid user for this OTP.")
 
-        # Activate user
-        user = otp_obj.user
-        user.is_active = True
-        user.is_verified = True
-        user.save()
+        # Activate & verify user atomically
+        with transaction.atomic():
+            # mark user verified/active (idempotent)
+            user.is_active = True
+            if hasattr(user, "is_verified"):
+                user.is_verified = True
+            user.save(update_fields=["is_active"] + (["is_verified"] if hasattr(user, "is_verified") else []))
 
-        # Mark OTP used
-        otp_obj.is_used = True
-        otp_obj.save()
+            # (Optional hardening) Invalidate any other unused registration OTPs for this user
+            # UserOTP.objects.filter(user=user, is_used=False).update(is_used=True)
 
         return {"message": "User verified successfully"}
 
