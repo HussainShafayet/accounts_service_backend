@@ -131,28 +131,32 @@ class VerifyOTPAPIView(APIView):
     def post(self, request):
         serializer = VerifyOTPSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        data = serializer.validated_data
+        data = serializer.validated_data  # contains access + refresh
 
-        # data['access'] is the access token returned by the serializer
-        access_token = data['access']
-        refresh_token = data['refresh']  # get refresh token
+        access_token = data["access"]
+        refresh_token = data["refresh"]
 
-        # Prepare response
-        response = Response(
-            {
-                "access": access_token,
-            },
-            status=status.HTTP_200_OK
-        )
+        response = Response({"access": access_token}, status=status.HTTP_200_OK)
 
-        # Set refresh token as HttpOnly cookie
+
+        same_site = 'None' if not settings.DEBUG else 'Lax'
+        secure_flag = not settings.DEBUG
+
+        # Optional: cookie lifetime == refresh lifetime
+        max_age = None
+        try:
+            max_age = int(settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds())
+        except Exception:
+            pass
+
         response.set_cookie(
             key='refresh_token',
             value=refresh_token,
             httponly=True,
-            secure=not settings.DEBUG,  # set True in production (HTTPS)
-            samesite='Strict',  # or 'Lax' if needed
-            path='/'
+            secure=secure_flag,
+            samesite=same_site,
+            path='/',
+            max_age=max_age,   # optional but recommended
         )
 
         return response

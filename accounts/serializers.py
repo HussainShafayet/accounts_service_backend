@@ -12,7 +12,7 @@ from datetime import timedelta
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.validators import UniqueValidator
 from django.db.models import Q
-from .services import send_otp_for
+from .services import send_otp_for, verify_otp
 
 
 User = get_user_model()
@@ -202,23 +202,27 @@ class VerifyOTPSerializer(serializers.Serializer):
     temp_token = serializers.UUIDField()
 
     def validate(self, data):
-        try:
-            otp_obj = PhoneOTP.objects.get(temp_token=data['temp_token'], is_used=False);
-        except PhoneOTP.DoesNotExist:
-            raise serializers.ValidationError("Invalid or expired OTP session.")
+        # Optional: basic OTP shape guard
+        otp = (data.get('otp') or '').strip()
+        if not otp.isdigit() or len(otp) != 6:
+            raise serializers.ValidationError("Invalid OTP format.")
 
-        if otp_obj.otp != data['otp']:
-            raise serializers.ValidationError("Invalid OTP.")
-        if timezone.now() > otp_obj.created_at + timedelta(minutes=5):
-            raise serializers.ValidationError("OTP expired.")
+        # Use the unified service; this is phone-login, so channel='phone'
+        res = verify_otp(
+            temp_token=str(data['temp_token']),
+            otp=otp,
+            channel="phone",
+        )
+        if not res.get("ok"):
+            # service returns: {"ok": False, "user": None, "message": "..."}
+            raise serializers.ValidationError(res.get("message") or "OTP verification failed.")
 
-        otp_obj.is_used = True
-        otp_obj.save()
+        user = res.get("user")
+        refresh = RefreshToken.for_user(user)
 
-        refresh = RefreshToken.for_user(otp_obj.user)
         return {
             "access": str(refresh.access_token),
-            "refresh": str(refresh)
+            "refresh": str(refresh),
         }
 
 class ResendOTPSerializer(serializers.Serializer):
