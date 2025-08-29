@@ -46,7 +46,7 @@ def _send_email(to: str, subject: str, body: str) -> None:
     )
 
 @transaction.atomic
-def send_otp_for(*, user, channel: Optional[Channel] = None, purpose: Purpose = "registration"):
+def send_otp_for(*, user, channel: Optional[Channel] = None, purpose: Purpose = "registration",force: bool = False):
     """
     Core sender with rate-limit, invalidate, expiry & delivery.
     Returns dict: {otp_sent, temp_token, expires_in_seconds, [debug_otp]}
@@ -60,20 +60,22 @@ def send_otp_for(*, user, channel: Optional[Channel] = None, purpose: Purpose = 
 
     now = timezone.now()
 
-    # Cooldown: block if another OTP was created very recently
-    recent = UserOTP.objects.filter(
-        user=user,
-        otp_type=channel,
-        is_used=False,
-        created_at__gte=now - timedelta(seconds=COOLDOWN_SEC),
-    ).order_by("-created_at").first()
-    if recent:
-        return {
-            "otp_sent": False,
-            "temp_token": str(recent.temp_token),
-            "expires_in_seconds": max(0, int((recent.expires_at - now).total_seconds())) if recent.expires_at else OTP_TTL_MIN*60,
-            "message": "Please wait before requesting another OTP.",
-        }
+    # ✅ Cooldown check only if not forced
+    if not force:
+        recent = UserOTP.objects.filter(
+            user=user,
+            otp_type=channel,
+            is_used=False,
+            created_at__gte=now - timedelta(seconds=COOLDOWN_SEC),
+        ).order_by("-created_at").first()
+        if recent:
+            return {
+                "otp_sent": False,
+                "temp_token": str(recent.temp_token),
+                "expires_in_seconds": max(0, int((recent.expires_at - now).total_seconds())) if recent.expires_at else OTP_TTL_MIN*60,
+                "message": "Please wait before requesting another OTP.",
+            }
+
 
     # Invalidate older unused OTPs for same channel
     UserOTP.objects.filter(user=user, otp_type=channel, is_used=False).update(is_used=True)

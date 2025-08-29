@@ -226,30 +226,63 @@ class VerifyOTPSerializer(serializers.Serializer):
         }
 
 class ResendOTPSerializer(serializers.Serializer):
-    phone_number = serializers.CharField()
+    phone_number = serializers.CharField(required=False, allow_blank=True)
+    email = serializers.EmailField(required=False, allow_blank=True)
+    temp_token = serializers.UUIDField(required=False)
 
-    def validate_phone_number(self, value):
-        if not User.objects.filter(phone_number=value).exists():
-            raise serializers.ValidationError("User with this phone number does not exist.")
-        return value
+    def validate(self, attrs):
+        phone   = (attrs.get("phone_number") or "").strip()
+        email   = (attrs.get("email") or "").strip()
+        temp_token = attrs.get("temp_token")
+
+        user = None
+        channel = None
+        purpose = "login"  # ✅ auto default
+
+        if phone or email:
+            q = Q()
+            if phone: q |= Q(phone_number=phone)
+            if email: q |= Q(email__iexact=email)
+            user = User.objects.filter(q).first()
+            if not user:
+                raise serializers.ValidationError("No user found for given identifier.")
+            channel = "phone" if phone else "email"
+
+        elif temp_token:
+            try:
+                rec = UserOTP.objects.select_related("user").get(temp_token=temp_token)
+            except UserOTP.DoesNotExist:
+                raise serializers.ValidationError("Invalid temp_token.")
+            user = rec.user
+            channel = rec.otp_type
+
+        else:
+            raise serializers.ValidationError("Provide phone_number, email or temp_token.")
+
+        attrs["user"] = user
+        attrs["channel"] = channel
+        attrs["purpose"] = purpose
+        return attrs
 
     def create(self, validated_data):
-        user = User.objects.get(phone_number=validated_data['phone_number'])
+        result = send_otp_for(
+            user=validated_data["user"],
+            channel=validated_data["channel"],
+            purpose=validated_data["purpose"],
+            force=True,  # ✅ always resend
+        )
 
-        # Invalidate old OTPs (optional)
-        PhoneOTP.objects.filter(user=user, is_used=False).update(is_used=True)
+        if not result.get("otp_sent", False):
+            raise serializers.ValidationError({"detail": result.get("message", "Failed to resend OTP")})
 
-        # Generate new OTP + temp_token
-        otp_code = str(random.randint(100000, 999999))
-        otp_obj = PhoneOTP.objects.create(user=user, otp=otp_code)
-
-        # TODO: send SMS here
-        print(f"Resent OTP {otp_code} to {user.phone_number}")
-
-        return {
+        data = {
             "otp_sent": True,
-            "temp_token": str(otp_obj.temp_token)
+            "temp_token": result["temp_token"],
+            "expires_in_seconds": result["expires_in_seconds"],
         }
+        if result.get("debug_otp"):
+            data["debug_otp"] = result["debug_otp"]
+        return data
 
 #class LoginOTPVerifySerializer(serializers.Serializer):
 #    otp = serializers.CharField()
