@@ -2,7 +2,7 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, throttling
-from .serializers import UserRegistrationSerializer, UserSerializer, SendOTPSerializer, VerifyOTPSerializer, ResendOTPSerializer, RegistrationOTPVerifySerializer
+from .serializers import UserRegistrationSerializer, UserSerializer, SendOTPSerializer, VerifyOTPSerializer, ResendOTPSerializer, RegistrationOTPVerifySerializer, ChangePasswordSerializer, PasswordResetStartSerializer, PasswordResetVerifySerializer, PasswordResetSetSerializer
 from .models import CustomUser, UserOTP
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -183,7 +183,38 @@ class LogoutView(APIView):
         )
 
         return response
-    
+
+# 1) Change password (authenticated)
+class ChangePasswordAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        s = ChangePasswordSerializer(data=request.data, context={"request": request})
+        s.is_valid(raise_exception=True)
+        return Response(s.save(), status=status.HTTP_200_OK)
+
+# 2) Reset start (send OTP via UserOTP)
+class PasswordResetStartAPIView(APIView):
+    throttle_classes = [throttling.AnonRateThrottle]
+    def post(self, request):
+        s = PasswordResetStartSerializer(data=request.data)
+        s.is_valid(raise_exception=True)
+        return Response(s.save(), status=status.HTTP_200_OK)
+
+class PasswordResetVerifyAPIView(APIView):
+    throttle_classes = [throttling.AnonRateThrottle]
+    def post(self, request):
+        s = PasswordResetVerifySerializer(data=request.data)
+        s.is_valid(raise_exception=True)
+        return Response(s.validated_data, status=status.HTTP_200_OK)
+
+class PasswordResetSetAPIView(APIView):
+    throttle_classes = [throttling.AnonRateThrottle]
+    def post(self, request):
+        s = PasswordResetSetSerializer(data=request.data)
+        s.is_valid(raise_exception=True)
+        return Response(s.save(), status=status.HTTP_200_OK)
+
 
 
 

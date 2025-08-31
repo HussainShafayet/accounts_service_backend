@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import RegisterUserAPIView,  UserListAPIView, CustomTokenObtainPairView, SendOTPAPIView, VerifyOTPAPIView, ResendOTPAPIView, CustomTokenRefreshView, LogoutView, VerifyRegistrationOTPAPIView
+from .views import RegisterUserAPIView,  UserListAPIView, CustomTokenObtainPairView, SendOTPAPIView, VerifyOTPAPIView, ResendOTPAPIView, CustomTokenRefreshView, LogoutView, VerifyRegistrationOTPAPIView, ChangePasswordAPIView, PasswordResetStartAPIView, PasswordResetVerifyAPIView, PasswordResetSetAPIView
 
 urlpatterns = [
     path('register/', RegisterUserAPIView.as_view()),
@@ -13,4 +13,12 @@ urlpatterns = [
     path('verify-otp/', VerifyOTPAPIView.as_view(), name='verify-otp'),
     path('resend-otp/', ResendOTPAPIView.as_view(), name='resend-otp'),
     path("logout/", LogoutView.as_view(), name="logout"),
+    
+    path('change-password/', ChangePasswordAPIView.as_view(), name='change-password'),
+    # accounts/urls.py
+    path('password-reset/start/', PasswordResetStartAPIView.as_view(), name='password-reset-start'),
+    path('password-reset/verify/', PasswordResetVerifyAPIView.as_view(), name='password-reset-verify'),
+    path('password-reset/set/', PasswordResetSetAPIView.as_view(), name='password-reset-set'),
+
+
 ]

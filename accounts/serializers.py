@@ -12,7 +12,7 @@ from datetime import timedelta
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.validators import UniqueValidator
 from django.db.models import Q
-from .services import send_otp_for, verify_otp
+from .services import send_otp_for, verify_otp, issue_password_reset_token, verify_password_reset_token
 from django.db import transaction
 
 
@@ -280,6 +280,106 @@ class ResendOTPSerializer(serializers.Serializer):
         if result.get("debug_otp"):
             data["debug_otp"] = result["debug_otp"]
         return data
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    old_password = serializers.CharField(write_only=True, trim_whitespace=False)
+    new_password = serializers.CharField(write_only=True, trim_whitespace=False)
+
+    def validate_new_password(self, value):
+        validate_password(value)  # Django validators (length, common, numeric etc.)
+        return value
+
+    def validate(self, attrs):
+        user = self.context["request"].user
+        if not user.check_password(attrs["old_password"]):
+            raise serializers.ValidationError({"old_password": "Old password is incorrect."})
+        if attrs["old_password"] == attrs["new_password"]:
+            raise serializers.ValidationError({"new_password": "New password must be different."})
+        return attrs
+
+    def save(self, **kwargs):
+        user = self.context["request"].user
+        user.set_password(self.validated_data["new_password"])
+        user.save(update_fields=["password"])
+        return {"detail": "Password changed successfully."}
+class PasswordResetStartSerializer(serializers.Serializer):
+    phone_number = serializers.CharField(required=False, allow_blank=True)
+    email = serializers.EmailField(required=False, allow_blank=True)
+
+    def validate(self, attrs):
+        phone = (attrs.get("phone_number") or "").strip()
+        email = (attrs.get("email") or "").strip()
+        if not phone and not email:
+            raise serializers.ValidationError("Provide phone_number or email.")
+
+        q = Q()
+        if phone: q |= Q(phone_number=phone)
+        if email: q |= Q(email__iexact=email)
+        user = User.objects.filter(q).first()
+        if not user:
+            raise serializers.ValidationError("User not found.")
+
+        attrs["user"] = user
+        attrs["channel"] = "phone" if phone else "email"
+        return attrs
+
+    def create(self, validated_data):
+        result = send_otp_for(
+            user=validated_data["user"],
+            channel=validated_data["channel"],
+            purpose="reset",
+            force=False
+        )
+        if not result.get("otp_sent"):
+            raise serializers.ValidationError({"detail": result.get("message", "Please wait before requesting another OTP.")})
+
+        resp = {
+            "otp_sent": True,
+            "temp_token": result["temp_token"],
+            "expires_in_seconds": result["expires_in_seconds"],
+        }
+        if result.get("debug_otp"):
+            resp["debug_otp"] = result["debug_otp"]
+        return resp
+class PasswordResetVerifySerializer(serializers.Serializer):
+    temp_token = serializers.UUIDField()
+    otp = serializers.CharField()
+
+    def validate(self, data):
+        otp = (data.get("otp") or "").strip()
+        if not otp.isdigit() or len(otp) != 6:
+            raise serializers.ValidationError("Invalid OTP format.")
+
+        res = verify_otp(temp_token=str(data["temp_token"]), otp=otp, channel=None)  # channel auto
+        if not res.get("ok"):
+            raise serializers.ValidationError(res.get("message") or "OTP verification failed.")
+
+        user = res.get("user")
+        # Issue short-lived signed token (default 10 min)
+        reset_token = issue_password_reset_token(user, minutes=10)
+        return {"reset_token": reset_token, "expires_in_seconds": 600}
+class PasswordResetSetSerializer(serializers.Serializer):
+    reset_token = serializers.CharField()
+    new_password = serializers.CharField(write_only=True, trim_whitespace=False)
+
+    def validate_new_password(self, value):
+        validate_password(value)
+        return value
+
+    def validate(self, attrs):
+        token = attrs.get("reset_token")
+        res = verify_password_reset_token(token, max_age=600)
+        if not res.get("ok"):
+            raise serializers.ValidationError(res.get("message") or "Invalid reset token.")
+        attrs["user"] = res["user"]
+        return attrs
+
+    def create(self, validated_data):
+        user = validated_data["user"]
+        user.set_password(validated_data["new_password"])
+        user.save(update_fields=["password"])
+        return {"detail": "Password has been reset successfully."}
 
 #class LoginOTPVerifySerializer(serializers.Serializer):
 #    otp = serializers.CharField()

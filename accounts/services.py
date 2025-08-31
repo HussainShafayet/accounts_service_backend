@@ -5,10 +5,11 @@ from django.utils.crypto import get_random_string
 from datetime import timedelta
 from django.utils import timezone
 from django.db import transaction
-import logging
-import re
+import logging, re, json, hashlib
 import random
 from typing import Optional, Literal
+from django.core.cache import cache
+from django.core.signing import TimestampSigner, BadSignature, SignatureExpired
 
 logger = logging.getLogger(__name__)
 
@@ -145,3 +146,62 @@ def send_otp(user):
     Auto-selects channel: phone if available else email. Purpose defaults to 'registration'.
     """
     return send_otp_for(user=user, channel=None, purpose="registration")
+
+
+
+# -------- Password reset signed token helpers (no DB table needed) --------
+
+def _signer() -> TimestampSigner:
+    # Optional: use a custom salt to isolate from other tokens
+    return TimestampSigner(salt="password-reset")
+
+def _token_cache_key(token: str) -> str:
+    # To optionally make the token one-time, cache its usage for the TTL
+    digest = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    return f"pwdreset:used:{digest}"
+
+def issue_password_reset_token(user, minutes: int = 10) -> str:
+    """
+    Issue a signed short-lived token that encodes the user id.
+    No DB row needed.
+    """
+    payload = {"uid": user.id}
+    raw = json.dumps(payload, separators=(",", ":"))
+    token = _signer().sign(raw)  # includes timestamp internally
+    return token
+
+def verify_password_reset_token(token: str, max_age: int = 600) -> dict:
+    """
+    Verify signed token and optional one-time usage check via cache.
+    Returns: {"ok": bool, "user": <User|None>, "message": str}
+    """
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+
+    # Optional: prevent reuse within TTL
+    used_key = _token_cache_key(token)
+    if cache.get(used_key):
+        return {"ok": False, "user": None, "message": "Reset token already used."}
+
+    try:
+        raw = _signer().unsign(token, max_age=max_age)
+    except SignatureExpired:
+        return {"ok": False, "user": None, "message": "Reset token expired."}
+    except BadSignature:
+        return {"ok": False, "user": None, "message": "Invalid reset token."}
+
+    try:
+        data = json.loads(raw)
+        uid = data["uid"]
+    except Exception:
+        return {"ok": False, "user": None, "message": "Invalid reset token payload."}
+
+    try:
+        user = User.objects.get(id=uid)
+    except User.DoesNotExist:
+        return {"ok": False, "user": None, "message": "User not found."}
+
+    # Mark as used (one-time) — expires automatically after max_age
+    cache.set(used_key, True, timeout=max_age)
+
+    return {"ok": True, "user": user, "message": "Valid."}
