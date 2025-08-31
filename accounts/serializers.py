@@ -349,15 +349,24 @@ class PasswordResetVerifySerializer(serializers.Serializer):
     def validate(self, data):
         otp = (data.get("otp") or "").strip()
         if not otp.isdigit() or len(otp) != 6:
-            raise serializers.ValidationError("Invalid OTP format.")
+            raise serializers.ValidationError({"otp": "Invalid OTP format."})
+        return data
 
-        res = verify_otp(temp_token=str(data["temp_token"]), otp=otp, channel=None)  # channel auto
+    def create(self, validated_data):
+        # ✅ Cast UUID -> str before passing along
+        temp_token = str(validated_data["temp_token"])
+        otp = validated_data["otp"]
+
+        res = verify_otp(temp_token=temp_token, otp=otp, channel=None)
         if not res.get("ok"):
-            raise serializers.ValidationError(res.get("message") or "OTP verification failed.")
+            # Ensure message is a plain string
+            msg = res.get("message") or "OTP verification failed."
+            raise serializers.ValidationError({"otp": msg})
 
-        user = res.get("user")
-        # Issue short-lived signed token (default 10 min)
-        reset_token = issue_password_reset_token(user, minutes=10)
+        # ✅ issue_password_reset_token should already return str
+        reset_token = issue_password_reset_token(res["user"], minutes=10)
+
+        # ✅ Return only strings/ints
         return {"reset_token": reset_token, "expires_in_seconds": 600}
 class PasswordResetSetSerializer(serializers.Serializer):
     reset_token = serializers.CharField()

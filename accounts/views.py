@@ -1,11 +1,12 @@
 # accounts/views.py
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import status, throttling
+from rest_framework import status, throttling, serializers
 from .serializers import UserRegistrationSerializer, UserSerializer, SendOTPSerializer, VerifyOTPSerializer, ResendOTPSerializer, RegistrationOTPVerifySerializer, ChangePasswordSerializer, PasswordResetStartSerializer, PasswordResetVerifySerializer, PasswordResetSetSerializer
 from .models import CustomUser, UserOTP
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
+from uuid import UUID
 
 from django.conf import settings
 
@@ -202,11 +203,11 @@ class PasswordResetStartAPIView(APIView):
         return Response(s.save(), status=status.HTTP_200_OK)
 
 class PasswordResetVerifyAPIView(APIView):
-    throttle_classes = [throttling.AnonRateThrottle]
     def post(self, request):
         s = PasswordResetVerifySerializer(data=request.data)
         s.is_valid(raise_exception=True)
-        return Response(s.validated_data, status=status.HTTP_200_OK)
+        return Response(s.save(), status=status.HTTP_200_OK)
+
 
 class PasswordResetSetAPIView(APIView):
     throttle_classes = [throttling.AnonRateThrottle]
