@@ -153,6 +153,9 @@ if not EMAIL_BACKEND:
 # If SSL is enabled, disable TLS to avoid conflicts
 if EMAIL_USE_SSL:
     EMAIL_USE_TLS = False
+    
+#recaptcha
+RECAPTCHA_SECRET_KEY = os.environ.get("RECAPTCHA_SECRET_KEY")
 
 
 

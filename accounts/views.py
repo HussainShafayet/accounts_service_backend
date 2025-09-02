@@ -6,11 +6,12 @@ from .serializers import UserRegistrationSerializer, UserSerializer, SendOTPSeri
 from .models import CustomUser, UserOTP
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework.exceptions import ValidationError
 from uuid import UUID
 
 from django.conf import settings
 
-from .services import send_otp
+from .services import send_otp_for
 import logging
 
 logger = logging.getLogger(__name__)
@@ -19,14 +20,22 @@ logger = logging.getLogger(__name__)
 from rest_framework_simplejwt.views import TokenObtainPairView
 from .serializers import CustomTokenObtainPairSerializer
 
+from utils.captcha import verify_captcha
+
 class RegisterUserAPIView(APIView):
     def post(self, request):
+        # 1) captcha verify
+        captcha_token = request.data.get("captcha_token")
+
+        if not captcha_token or not verify_captcha(captcha_token):
+            raise ValidationError({"captcha": ["Invalid captcha. Please try again."]})
+
+        # 2) normal registration flow
         serializer = UserRegistrationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
 
-        
-        from .services import send_otp_for
+        # 3) OTP send
         result = send_otp_for(user=user, purpose="registration", force=True)
 
         if not result.get("otp_sent"):
@@ -35,6 +44,7 @@ class RegisterUserAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # 4) success response
         payload = {
             "temp_token": result["temp_token"],
             "pending": True,
