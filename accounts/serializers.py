@@ -390,4 +390,17 @@ class PasswordResetSetSerializer(serializers.Serializer):
         user.save(update_fields=["password"])
         return {"detail": "Password has been reset successfully."}
 
+class UserReadSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        # আপনার User model এ যে ফিল্ডগুলো আছে সেগুলো রাখুন
+        fields = [
+            "id", "username", "email", "phone_number",
+            "first_name", "last_name", "address",
+            "is_active", "is_staff","is_verified"
+        ]
+        read_only_fields = fields
+
+
+
 

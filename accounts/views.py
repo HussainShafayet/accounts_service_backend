@@ -2,7 +2,7 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, throttling, serializers
-from .serializers import UserRegistrationSerializer, UserSerializer, SendOTPSerializer, VerifyOTPSerializer, ResendOTPSerializer, RegistrationOTPVerifySerializer, ChangePasswordSerializer, PasswordResetStartSerializer, PasswordResetVerifySerializer, PasswordResetSetSerializer
+from .serializers import UserRegistrationSerializer, UserSerializer, SendOTPSerializer, VerifyOTPSerializer, ResendOTPSerializer, RegistrationOTPVerifySerializer, ChangePasswordSerializer, PasswordResetStartSerializer, PasswordResetVerifySerializer, PasswordResetSetSerializer, UserReadSerializer
 from .models import CustomUser, UserOTP
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -226,6 +226,17 @@ class PasswordResetSetAPIView(APIView):
         s.is_valid(raise_exception=True)
         return Response(s.save(), status=status.HTTP_200_OK)
 
+
+class MeAPIView(APIView):
+    """
+    Return the currently authenticated user's profile.
+    Auth: JWT access token (Authorization: Bearer <token>)
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        data = UserReadSerializer(request.user).data
+        return Response(data)
 
 
 
