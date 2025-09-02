@@ -390,30 +390,4 @@ class PasswordResetSetSerializer(serializers.Serializer):
         user.save(update_fields=["password"])
         return {"detail": "Password has been reset successfully."}
 
-#class LoginOTPVerifySerializer(serializers.Serializer):
-#    otp = serializers.CharField()
-#    temp_token = serializers.UUIDField()
-
-#    def validate(self, data):
-#        try:
-#            otp_obj = UserOTP.objects.get(temp_token=data['temp_token'], is_used=False)
-#        except UserOTP.DoesNotExist:
-#            raise serializers.ValidationError("Invalid or expired OTP session.")
-
-#        if otp_obj.otp != data['otp']:
-#            raise serializers.ValidationError("Invalid OTP.")
-
-#        if timezone.now() > otp_obj.expires_at:
-#            raise serializers.ValidationError("OTP expired.")
-
-#        otp_obj.is_used = True
-#        otp_obj.save()
-
-#        user = otp_obj.user
-
-#        refresh = RefreshToken.for_user(user)
-#        return {
-#            "access": str(refresh.access_token),
-#            "refresh": str(refresh)
-#        }
 
