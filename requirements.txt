@@ -7,4 +7,5 @@ PyJWT==2.10.1
 sqlparse==0.5.3
 psycopg2-binary
 requests>=2.31.0
+Pillow>=10.0.0
 

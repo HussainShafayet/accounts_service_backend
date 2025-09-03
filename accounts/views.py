@@ -2,7 +2,7 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, throttling, serializers
-from .serializers import UserRegistrationSerializer, UserSerializer, SendOTPSerializer, VerifyOTPSerializer, ResendOTPSerializer, RegistrationOTPVerifySerializer, ChangePasswordSerializer, PasswordResetStartSerializer, PasswordResetVerifySerializer, PasswordResetSetSerializer, UserReadSerializer
+from .serializers import UserRegistrationSerializer, UserSerializer, SendOTPSerializer, VerifyOTPSerializer, ResendOTPSerializer, RegistrationOTPVerifySerializer, ChangePasswordSerializer, PasswordResetStartSerializer, PasswordResetVerifySerializer, PasswordResetSetSerializer, UserReadSerializer, ProfileUpdateSerializer
 from .models import CustomUser, UserOTP
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -227,16 +227,34 @@ class PasswordResetSetAPIView(APIView):
         return Response(s.save(), status=status.HTTP_200_OK)
 
 
-class MeAPIView(APIView):
-    """
-    Return the currently authenticated user's profile.
-    Auth: JWT access token (Authorization: Bearer <token>)
-    """
+#class MeAPIView(APIView):
+#    """
+#    Return the currently authenticated user's profile.
+#    Auth: JWT access token (Authorization: Bearer <token>)
+#    """
+#    permission_classes = [IsAuthenticated]
+
+#    def get(self, request):
+#        data = UserReadSerializer(request.user).data
+#        return Response(data)
+
+class ProfileAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        data = UserReadSerializer(request.user).data
-        return Response(data)
+        """Get current user's profile"""
+        return Response(UserReadSerializer(request.user).data)
+
+    def patch(self, request):
+        """Update editable profile fields (with file upload)"""
+        serializer = ProfileUpdateSerializer(
+            instance=request.user,
+            data=request.data,
+            partial=True
+        )
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        return Response(UserReadSerializer(user).data, status=status.HTTP_200_OK)
 
 
 

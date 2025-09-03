@@ -396,10 +396,29 @@ class UserReadSerializer(serializers.ModelSerializer):
         # আপনার User model এ যে ফিল্ডগুলো আছে সেগুলো রাখুন
         fields = [
             "id", "username", "email", "phone_number",
-            "first_name", "last_name", "address",
+            "first_name", "last_name", "address","profile_picture",
             "is_active", "is_staff","is_verified"
         ]
         read_only_fields = fields
+        
+class ProfileUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ["first_name", "last_name", "username", "address", "profile_picture"]
+        extra_kwargs = {
+            "first_name": {"required": False, "allow_blank": True},
+            "last_name": {"required": False, "allow_blank": True},
+            "address": {"required": False, "allow_blank": True},
+            "username": {"required": False, "allow_blank": True},
+            "profile_picture": {"required": False},
+        }
+
+    def update(self, instance, validated_data):
+        for field in self.Meta.fields:
+            if field in validated_data:
+                setattr(instance, field, validated_data[field])
+        instance.save()
+        return instance
 
 
 

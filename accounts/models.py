@@ -50,7 +50,9 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     last_name = models.CharField(max_length=50)
     address = models.TextField(default="Temporary Address")
 
-    profile_picture = models.URLField(blank=True, null=True)
+    profile_picture = models.ImageField(
+        upload_to="profiles/", blank=True, null=True
+    )
 
     is_active = models.BooleanField(default=False)
     is_staff = models.BooleanField(default=False)
