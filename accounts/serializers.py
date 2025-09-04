@@ -464,13 +464,13 @@ class GoogleLoginSerializer(serializers.Serializer):
             user.set_unusable_password()
 
             # Ensure username uniqueness
-            base = user.username or "user"
-            uname = base
-            i = 1
-            while User.objects.filter(username__iexact=uname).exists():
-                uname = f"{base}{i}"[:50]
-                i += 1
-            user.username = uname
+            #base = user.username or "user"
+            #uname = base
+            #i = 1
+            #while User.objects.filter(username__iexact=uname).exists():
+            #    uname = f"{base}{i}"[:50]
+            #    i += 1
+            #user.username = uname
 
             # Set profile picture if empty and you switched to ImageField later—here we keep URL if your model is URLField previously
             if hasattr(user, "profile_picture") and not getattr(user, "profile_picture", None) and isinstance(picture, str):
