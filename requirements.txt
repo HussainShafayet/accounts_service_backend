@@ -8,4 +8,5 @@ sqlparse==0.5.3
 psycopg2-binary
 requests>=2.31.0
 Pillow>=10.0.0
+google-auth>=2.29.0
 

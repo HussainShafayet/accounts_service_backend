@@ -14,6 +14,7 @@ from rest_framework.validators import UniqueValidator
 from django.db.models import Q
 from .services import send_otp_for, verify_otp, issue_password_reset_token, verify_password_reset_token
 from django.db import transaction
+from utils.google_oauth import verify_google_id_token, GoogleTokenError
 
 
 User = get_user_model()
@@ -419,6 +420,98 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
                 setattr(instance, field, validated_data[field])
         instance.save()
         return instance
+
+class GoogleLoginSerializer(serializers.Serializer):
+    id_token = serializers.CharField(write_only=True)
+
+    def validate(self, attrs):
+        raw_token = attrs.get("id_token")
+        try:
+            payload = verify_google_id_token(raw_token)
+        except GoogleTokenError as e:
+            raise serializers.ValidationError({"id_token": str(e)})
+
+        # Basic checks
+        if not payload.get("email_verified", False):
+            raise serializers.ValidationError({"email": "Google email is not verified."})
+
+        attrs["google_payload"] = payload
+        return attrs
+
+    def create(self, validated_data):
+        p = validated_data["google_payload"]
+        email = p.get("email").lower()
+        sub = p.get("sub")  # Google's stable user ID
+        first_name = p.get("given_name") or ""
+        last_name  = p.get("family_name") or ""
+        full_name  = p.get("name") or ""
+        picture    = p.get("picture") or None
+        request    = self.context.get("request")
+
+        # 1) Try exact email match
+        user = User.objects.filter(email__iexact=email).first()
+        if not user:
+            # 2) Create a new user (social sign-in users are active/verified)
+            user = User(
+                email=email,
+                username= "",  # simple default, unique constraint may clash; handle below
+                first_name=first_name or (full_name.split(" ")[0] if full_name else ""),
+                last_name=last_name or (" ".join(full_name.split(" ")[1:]) if full_name else ""),
+                is_active=True,
+                is_verified=True,
+            )
+            # Set unusable password for social users
+            user.set_unusable_password()
+
+            # Ensure username uniqueness
+            base = user.username or "user"
+            uname = base
+            i = 1
+            while User.objects.filter(username__iexact=uname).exists():
+                uname = f"{base}{i}"[:50]
+                i += 1
+            user.username = uname
+
+            # Set profile picture if empty and you switched to ImageField later—here we keep URL if your model is URLField previously
+            if hasattr(user, "profile_picture") and not getattr(user, "profile_picture", None) and isinstance(picture, str):
+                # If your field is ImageField now, skip auto-copying remote URL.
+                # Keep None; frontend may upload image later. If it's URLField, you can store it:
+                try:
+                    from django.db.models.fields.files import ImageFieldFile
+                    # if it's ImageField, do nothing
+                except Exception:
+                    user.profile_picture = picture
+
+            user.save()
+
+        # Optional: update names/picture on subsequent logins (without overwriting user changes too aggressively)
+        updated = False
+        if first_name and not user.first_name:
+            user.first_name = first_name; updated = True
+        if last_name and not user.last_name:
+            user.last_name = last_name; updated = True
+        if picture and hasattr(user, "profile_picture"):
+            # Only update if empty OR you're okay overwriting with Google
+            if not user.profile_picture:
+                try:
+                    from django.db.models.fields.files import ImageFieldFile
+                except Exception:
+                    user.profile_picture = picture
+                    updated = True
+        if updated:
+            user.save()
+
+        # Track last login IP (optional)
+        if hasattr(user, "last_login_ip"):
+            try:
+                ip = request.META.get("HTTP_X_FORWARDED_FOR", "").split(",")[0].strip() or request.META.get("REMOTE_ADDR")
+                if ip and ip != user.last_login_ip:
+                    user.last_login_ip = ip
+                    user.save(update_fields=["last_login_ip"])
+            except Exception:
+                pass
+        return {"user": user}
+
 
 
 

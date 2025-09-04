@@ -2,7 +2,7 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, throttling, serializers
-from .serializers import UserRegistrationSerializer, UserSerializer, SendOTPSerializer, VerifyOTPSerializer, ResendOTPSerializer, RegistrationOTPVerifySerializer, ChangePasswordSerializer, PasswordResetStartSerializer, PasswordResetVerifySerializer, PasswordResetSetSerializer, UserReadSerializer, ProfileUpdateSerializer
+from .serializers import UserRegistrationSerializer, UserSerializer, SendOTPSerializer, VerifyOTPSerializer, ResendOTPSerializer, RegistrationOTPVerifySerializer, ChangePasswordSerializer, PasswordResetStartSerializer, PasswordResetVerifySerializer, PasswordResetSetSerializer, UserReadSerializer, ProfileUpdateSerializer, GoogleLoginSerializer
 from .models import CustomUser, UserOTP
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -227,17 +227,6 @@ class PasswordResetSetAPIView(APIView):
         return Response(s.save(), status=status.HTTP_200_OK)
 
 
-#class MeAPIView(APIView):
-#    """
-#    Return the currently authenticated user's profile.
-#    Auth: JWT access token (Authorization: Bearer <token>)
-#    """
-#    permission_classes = [IsAuthenticated]
-
-#    def get(self, request):
-#        data = UserReadSerializer(request.user).data
-#        return Response(data)
-
 class ProfileAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -255,6 +244,45 @@ class ProfileAPIView(APIView):
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
         return Response(UserReadSerializer(user).data, status=status.HTTP_200_OK)
+
+class GoogleLoginAPIView(APIView):
+    """
+    Frontend sends Google ID token (One Tap or OAuth implicit).
+    Server verifies & issues JWT (refresh cookie + access in body).
+    """
+    authentication_classes = []  # not required
+    permission_classes = []      # public
+
+    def post(self, request):
+        s = GoogleLoginSerializer(data=request.data, context={"request": request})
+        s.is_valid(raise_exception=True)
+        result = s.save()
+        user = result["user"]
+
+        refresh = RefreshToken.for_user(user)
+        access  = str(refresh.access_token)
+        refresh_str = str(refresh)
+
+        # Prepare response
+        payload = {
+            "access": access,
+            "user": UserReadSerializer(user).data
+        }
+        resp = Response(payload, status=status.HTTP_200_OK)
+
+        # HttpOnly refresh cookie
+        resp.set_cookie(
+            key="refresh_token",
+            value=refresh_str,
+            httponly=True,
+            secure=not settings.DEBUG,   # True in production (HTTPS)
+            samesite="Strict",           # or 'Lax' as per your app
+            path="/",                    # cookie scope
+            max_age=14*24*3600           # optional (2 weeks)
+        )
+        return resp
+
+
 
 
 
