@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from .models import CustomUser, PhoneOTP
+from .models import CustomUser, UserOTP
 
 @admin.register(CustomUser)
 class CustomUserAdmin(UserAdmin):
@@ -26,8 +26,8 @@ class CustomUserAdmin(UserAdmin):
 )
 
 
-@admin.register(PhoneOTP)
-class PhoneOTPAdmin(admin.ModelAdmin):
+@admin.register(UserOTP)
+class UserOTPAdmin(admin.ModelAdmin):
     list_display = ('user', 'otp', 'temp_token', 'created_at', 'is_used')
     list_filter = ('is_used', 'created_at')
     search_fields = ('user__phone_number', 'otp', 'temp_token')
